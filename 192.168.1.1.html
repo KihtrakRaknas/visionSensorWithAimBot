@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<!-- saved from url=(0019)http://192.168.1.1/ -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+</head>
+
+<body style="cursor: default;">
+<script type="text/javascript">
+
+console.log('init');
+
+var canvas = document.createElement("canvas");
+var textCanvas = document.createElement("canvas");
+var image = document.createElement("img");
+
+Overlay(canvas, textCanvas, image);
+Joystick(Overlay, 100);
+Text(Overlay);
+
+//image.src = 'http://i.telegraph.co.uk/multimedia/archive/01475/Popweekbeatles_1475738c.jpg';
+
+document.body.appendChild(image);
+document.body.appendChild(textCanvas);
+document.body.appendChild(canvas);
+
+
+update();
+startSocket();
+
+
+var g_ws;
+var g_count = 0;
+var g_count0 = 0;
+var g_time0 = 0;
+var g_rate = 0;
+var g_lastTime = (new Date()).getTime();
+
+function calcRate()
+{
+	var d = new Date();
+	var time;
+    
+    g_count++;
+	time = d.getTime();
+	if (time-g_time0 > 1000)
+	{
+		g_rate = (g_count - g_count0)*1000/(time - g_time0);
+		g_rate = g_rate.toFixed(2);
+		g_count0 = g_count;
+		g_time0 = time;
+	}
+    return g_rate;
+}
+
+function startSocket()
+{
+	g_ws = new WebSocket("ws://192.168.1.1");
+	g_ws.binaryType = 'arraybuffer';
+
+	g_ws.onopen = function() {
+		console.log("websocket connected");
+	};
+
+	g_ws.onclose = function() {
+		console.log("websocket close");
+	};
+	
+	g_ws.onerror = function() {
+    //alert("WebSocket error");
+		console.log("websocket error");
+		startSocket();
+	};
+
+	g_ws.onmessage = function(event) {
+		var data = new Uint8Array(event.data);
+		var rate = calcRate();
+		var blob = new Blob([data], { type: "image/jpeg" });
+		var urlCreator = window.URL || window.webkitURL;
+		var url = urlCreator.createObjectURL(blob);	
+		image.src = url;
+		image.onload = function() {
+			urlCreator.revokeObjectURL(this.src);
+			
+		Text.setLine(1, 'FPS ' + rate);
+		}
+	}		
+}
+
+
+function update() {
+	Overlay.update();
+	Joystick.update();
+	Text.update();
+}
+
+document.addEventListener('joypos', function(event) {
+  Text.setLine(0, 'Joypos ' + event.detail.x.toFixed(2) + ' ' + event.detail.y.toFixed(2));
+  Text.update();
+});
+
+window.onresize = function() {
+  update();
+}
+
+function drawCircle(ctx, x, y, radius, lineWidth, color) {
+  ctx.beginPath();
+  ctx.lineWidth = lineWidth;
+  ctx.arc(x, y, radius, 0, 2 * Math.PI, true);
+  if (lineWidth == 0) // fill circle
+  {
+    ctx.fillStyle = color;
+    ctx.fill();
+  } else // draw circle outline
+  {
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  }
+}
+
+function roundedRect(ctx, x, y, width, height, radius, lineWidth, color) {
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.moveTo(x, y + radius);
+  ctx.lineTo(x, y + height - radius);
+  ctx.arcTo(x, y + height, x + radius, y + height, radius);
+  ctx.lineTo(x + width - radius, y + height);
+  ctx.arcTo(x + width, y + height, x + width, y + height - radius, radius);
+  ctx.lineTo(x + width, y + radius);
+  ctx.arcTo(x + width, y, x + width - radius, y, radius);
+  ctx.lineTo(x + radius, y);
+  ctx.arcTo(x, y, x, y + radius, radius);
+  ctx.stroke();
+}
+
+function Text(overlay) {
+  var lines = [];
+  
+  Text.update = function() {
+  	var textWidth = 0.2;
+  	var xoffset = 0.1;
+    var yoffset = 0.05;
+    var pitch = 1.5;
+  	var i;
+  	textWidth = overlay.width*textWidth/10;
+    xoffset = overlay.width*xoffset/10;
+    yoffset = overlay.width*yoffset/10;
+  	overlay.textCtx.globalAlpha = 0.8;
+  	overlay.textCtx.font = textWidth + 'pt Verdana';
+    overlay.textCtx.fillStyle = 'white';
+    overlay.textCtx.clearRect(0, 0, overlay.width, overlay.height);
+    for (i=0; i<lines.length; i++){  
+    	overlay.textCtx.fillText(lines[i], xoffset, (i+1)*textWidth*pitch+yoffset);
+    }
+  }
+  Text.clear = function() {
+  	var i;
+    for (i=0; i<lines.length; i++){
+    	lines[i] = '';
+    }
+  }
+  Text.setLine = function(line, text) {
+  	lines[line] = text;
+  }
+}
+ 
+function Overlay(canvas, textCanvas, image) {
+  
+  Overlay.update = function() {
+    var border = 0;
+    var iar = 460 / 288; // image aspect ratio
+    var wwidth = window.innerWidth - border;
+    var wheight = window.innerHeight - border;
+    var war = wwidth / wheight; // window aspect ratio
+    if (war > iar) {
+      Overlay.height = wheight;
+      Overlay.width = iar * Overlay.height;
+      Overlay.top = 0;
+      Overlay.left = (wwidth - Overlay.width) / 2;
+    } else {
+      Overlay.width = wwidth;
+      Overlay.height = Overlay.width / iar;
+      Overlay.left = 0;
+      Overlay.top = (wheight - Overlay.height) / 2;
+    }
+
+    canvas.width = Overlay.width;
+    canvas.height = Overlay.height;
+    canvas.style.top = Overlay.top + 'px';
+    canvas.style.left = Overlay.left + 'px';
+    textCanvas.width = Overlay.width;
+    textCanvas.height = Overlay.height;
+    textCanvas.style.top = Overlay.top + 'px';
+    textCanvas.style.left = Overlay.left + 'px';
+    image.width = Overlay.width;
+    image.height = Overlay.height;
+    image.style.top = Overlay.top + 'px';
+    image.style.left = Overlay.left + 'px';
+  }
+
+	Overlay.canvas = canvas; 
+  Overlay.ctx = canvas.getContext('2d');
+  canvas.style.position = 'absolute';
+	Overlay.textCanvas = textCanvas; 
+  Overlay.textCtx = textCanvas.getContext('2d');
+  textCanvas.style.position = 'absolute';
+  image.style.position = 'absolute';
+}
+
+function Joystick(overlay, freq) {
+ 	
+  function mousedown(event){
+    var joy = region(event.layerX, event.layerY);
+    joyActive = joy.test
+    if (joyActive) {
+      draw(highlightAlpha);
+      hightlighted = true;
+      move(joy.x, joy.y);
+    }
+  }
+  
+  function mouseup(event){
+    joyActive = false;
+    clearTimeout(timeout);
+    timeout = setTimeout(timeoutHandler, 1000);
+	move(0, 0);
+  }
+    
+  function mousemove(event) {
+     var joy = region(event.layerX, event.layerY);
+     if (joy.test || joyActive)
+      document.body.style.cursor = 'pointer';
+    else
+      document.body.style.cursor = 'default';
+
+    if (joyActive) {
+      move(joy.x, joy.y);
+      //console.log(joy.px + ' ' + joy.py);
+    } else if (!highlighted) {
+      draw(highlightAlpha);
+      hightlighted = true;
+      clearTimeout(timeout);
+      timeout = setTimeout(timeoutHandler, 1000);
+    }
+  }
+
+  function timeoutHandler(){
+  	if (!joyActive) {
+    	draw(lowlightAlpha);
+      highlighted = false;  
+  	}
+  }
+	
+  function region(x, y) {
+    var test = true;
+
+    max = joyWidth * 0.35;
+    
+    x = x - joyx;
+    y = y - joyy;
+
+    if (x > max) {
+      x = max;
+      test = false;
+    } else if (x < -max) {
+      x = -max;
+      test = false;
+    }
+    if (y > max) {
+      y = max;
+      test = false;
+    } else if (y < -max) {
+      y = -max;
+      test = false;
+    }
+
+    return {
+      test: test,
+      x: x,
+      y: y,
+    };
+  }
+
+  function draw(alpha) {
+    var joyLineWidth = 0.4;
+    var joyPos = 30;
+    joyNub = 10;
+    joyWidth = 40;
+
+    overlay.ctx.clearRect(0, 0, overlay.width, overlay.height);
+    overlay.ctx.globalAlpha = alpha;
+
+    // draw joystick outline
+    Joystick.xpos = Joystick.ypos = 0;
+    joyWidth = joyWidth / 100 * overlay.width;
+    joyx = overlay.width - joyPos / 100 * overlay.width;
+    joyNub = joyNub / 100 * joyWidth;
+    joyy = overlay.height / 2;
+    joyLineWidth = joyLineWidth / 100 * overlay.width;
+    roundedRect(overlay.ctx, joyx - joyWidth / 2, joyy - joyWidth / 2, joyWidth, joyWidth, joyNub, joyLineWidth, 'white');
+    move(0, 0);
+      
+      var ctx = canvas.getContext("2d");
+ctx.rect(canvas.width/2-150/2, canvas.height/2-100/2, 150, 100);
+ctx.strokeStyle = "#16ff2e";
+ctx.globalAlpha=1;
+ctx.stroke();
+  }
+
+  function move(x, y) {
+    overlay.ctx.clearRect(joyx + Joystick.xpos - joyNub - 1, joyy + Joystick.ypos - joyNub - 1, joyNub * 2 + 2, joyNub * 2 + 2);
+    Joystick.xpos = x;
+    Joystick.ypos = y;
+    drawCircle(overlay.ctx, joyx + Joystick.xpos, joyy + Joystick.ypos, joyNub, 0, 'white');
+  }
+
+  Joystick.update = function() {
+    draw(lowlightAlpha);
+  }
+
+  function sendPos() {
+    var event = new CustomEvent('joypos', {
+      detail: {
+        x: Joystick.xpos/max,
+        y: -Joystick.ypos/max
+      }
+    });
+    document.dispatchEvent(event);
+  }
+
+  var joyWidth;
+	var joyNub;
+	var joyx;
+	var joyy;
+	var joydx;
+	var joydy;
+	var timeout;
+  var max = 1;
+  var highlightAlpha = 0.8;
+	var lowlightAlpha = 0.2;
+	var joyActive = false;
+	var highlighted = false;
+	Joystick.xpos = 0;
+  Joystick.ypos = 0;
+  
+  setInterval(sendPos, freq);
+  overlay.canvas.onmousemove = mousemove;
+	overlay.canvas.onmousedown = mousedown;
+	overlay.canvas.onmouseup = mouseup;
+}
+    
+    
+    
+
+</script><img width="645" height="403" style="position: absolute; top: 140.087px; left: 0px;" src="blob:http://192.168.1.1/8ddea2b3-94e3-4723-b3f4-b057ff496a09"><canvas width="645" height="403" style="position: absolute; top: 140.087px; left: 0px;"></canvas><canvas width="645" height="403" style="position: absolute; top: 140.087px; left: 0px;"></canvas>
+
+
+</body></html>
